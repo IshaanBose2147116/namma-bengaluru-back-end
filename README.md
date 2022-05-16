@@ -11,6 +11,7 @@ This repository contains the backend server for Namma Bengaluru website.
 1. Run the python file `init_db.py`. This creates the required database and tables for Namma Bengaluru website.
 2. Execute: `npm install`. This will install all the required node modules.
 3. The server will run at port 5001 by default. To change it, go to line 15 in `server.js`.
+4. If any changes made to frontend server, make the same changes to `whitelist` variable in `server.js` at line 19.
 
 ### Running the Server
 Execute `npm start` in the directory with `server.js`.
