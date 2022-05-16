@@ -3,6 +3,7 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const crypto = require('crypto');
+var cors = require('cors');
 const fs = require('fs');
 const fileupload = require('express-fileupload')
 const readline = require('readline').createInterface({
@@ -11,10 +12,11 @@ const readline = require('readline').createInterface({
 });  
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 const MIN_UID = 1;
 const MAX_UID = 999999;
 const dbDetailsPath = './db_details.json';
+const whitelist = [ 'http://localhost:5000' ];
 
 let conn = null;
 
@@ -63,10 +65,17 @@ function registerLocalBusiness(conn, data, callback) {
 
 app.use(bodyParser.json());
 app.use(fileupload({ createParentPath: true }));
-
-app.use("/styles", express.static(path.join(__dirname, '../styles')));
-app.use("/scripts", express.static(path.join(__dirname, '../scripts')));
-app.use("/assests", express.static(path.join(__dirname, '../assests')));
+app.use(cors({
+    origin: (origin, callback) => {
+        console.log('Origin:', origin);
+        if (whitelist.includes(origin) || !origin) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: [ 'GET', 'POST', 'DELETE', 'UPDATE', 'PUT' ]
+}));
 
 const ROUTER = express.Router({
     caseSensitive: true,
@@ -74,56 +83,6 @@ const ROUTER = express.Router({
 });
 
 app.use(ROUTER);
-
-// retrieving pages
-ROUTER.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../index.html'));
-})
-.get('/test', (req, res) => {
-    res.sendFile(path.join(__dirname, '../test.html'));
-})
-.get('/registration', (req, res) => {
-    res.sendFile(path.join(__dirname, '../registration.html'));
-})
-.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, '../login.html'));
-})
-.get('/tourism', (req, res) => {
-    res.sendFile(path.join(__dirname, '../tourism.html'));
-})
-.get('/vehicle-booking', (req, res) => {
-    res.sendFile(path.join(__dirname, '../vehicle_booking.html'));
-})
-.get('/hotels', (req, res) => {
-    res.sendFile(path.join(__dirname, '../hotels.html'));
-})
-.get('/introduction', (req, res) => {
-    res.sendFile(path.join(__dirname, '../introduction.html'));
-})
-.get('/history-and-heritage', (req, res) => {
-    res.sendFile(path.join(__dirname, '../history_and_heritage.html'));
-})
-.get('/economy', (req, res) => {
-    res.sendFile(path.join(__dirname, '../economy.html'));
-})
-.get('/festival', (req, res) => {
-    res.sendFile(path.join(__dirname, '../festival.html'));
-})
-.get('/sports', (req, res) => {
-    res.sendFile(path.join(__dirname, '../sports.html'));
-})
-.get('/health', (req, res) => {
-    res.sendFile(path.join(__dirname, '../health.html'));
-})
-.get('/parks', (req, res) => {
-    res.sendFile(path.join(__dirname, '../parks.html'));
-})
-.get('/offers', (req, res) => {
-    res.sendFile(path.join(__dirname, '../offers.html'));
-})
-.get('/profile', (req, res) => {
-    res.sendFile(path.join(__dirname, '../profile_details.html'));
-});
 
 // GET method endpoints
 ROUTER.get('/admin/:uid', (req, res) => {
@@ -136,40 +95,36 @@ ROUTER.get('/admin/:uid', (req, res) => {
                 if (result.length === 0 || result[0].is_admin === 0) {
                     res.sendStatus(401);
                 } else {
-                    res.sendFile(path.join(__dirname, '../admin_dashboard.html'));
+                    res.sendStatus(200);
                 }
             });
         }
     });
 })
 .get('/booked-vehicles/:uid?', (req, res) => {
-    if (!req.params.uid) {
-        res.sendFile(path.join(__dirname, '../booked_vehicles.html'));
-    } else {
-        conn.connect(err => {
-            if (err) {
-                console.log(err);
-                res.status(500).send(err);
-            } else {
-                conn.query(`select b.booking_id, b.from_date, b.till_date, v.license_plate, v.colour, v.type, 
-                    concat_ws(' ', d.fname, d.mname, d.lname) as driver_name, d.phone_num from vehicle_booking b 
-                    join vehicle v on b.vehicle_id=v.vehicle_id join driver d on v.driver_id=d.driver_id where 
-                    b.booked_by=? order by b.from_date`, [ req.params.uid ], (err, result) => {
-                        if (err) {
-                            console.log(err);
-                            res.status(500).send(err);
+    conn.connect(err => {
+        if (err) {
+            console.log(err);
+            res.status(500).send(err);
+        } else {
+            conn.query(`select b.booking_id, b.from_date, b.till_date, v.license_plate, v.colour, v.type, 
+                concat_ws(' ', d.fname, d.mname, d.lname) as driver_name, d.phone_num from vehicle_booking b 
+                join vehicle v on b.vehicle_id=v.vehicle_id join driver d on v.driver_id=d.driver_id where 
+                b.booked_by=? order by b.from_date`, [ req.params.uid ], (err, result) => {
+                    if (err) {
+                        console.log(err);
+                        res.status(500).send(err);
+                    } else {
+                        if (result.length === 0) {
+                            res.sendStatus(204);
                         } else {
-                            if (result.length === 0) {
-                                res.sendStatus(204);
-                            } else {
-                                res.status(200).send(result);
-                            }
+                            res.status(200).send(result);
                         }
                     }
-                );
-            }
-        });
-    }
+                }
+            );
+        }
+    });
 })
 .get('/available-vehicles', (req, res) => {
     if (Object.keys(req.query).length < 2) {
@@ -788,7 +743,7 @@ function main() {
         conn = mysql.createConnection(JSON.parse(fs.readFileSync(dbDetailsPath, 'utf8')));
 
         app.listen(PORT, () => {
-            console.log(`Visit: http://localhost:${PORT}`);
+            console.log(`Back end server running at: http://localhost:${PORT}`);
         });
     } else {
         readline.question('Enter db password: ', password => {
