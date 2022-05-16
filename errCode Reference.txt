@@ -1,0 +1,15 @@
+1XXX - MySQL Error
+1000 = Duplicate email
+1001 = Duplicate phone number
+1010 = Email not in database
+1011 = Password not in database
+1012 = Phone number not in database
+1020 = Incorrect Datetime value
+1030 = License plate not in database;
+
+2XXX - Request Error
+2000 = (for vehicle booking) not enough query string parameters
+2001 = (for vehicle booking) too many query string parameters
+2002 = invalid query string parameters passed
+2003 = parameter missing
+2004 = invalid parameter passed
