@@ -5,11 +5,11 @@ const mysql = require('mysql2');
 const crypto = require('crypto');
 var cors = require('cors');
 const fs = require('fs');
-const fileupload = require('express-fileupload')
+const fileupload = require('express-fileupload');
 const readline = require('readline').createInterface({
     input: process.stdin,
     output: process.stdout,
-});  
+});
 
 const app = express();
 const PORT = 5001;
@@ -17,6 +17,8 @@ const MIN_UID = 1;
 const MAX_UID = 999999;
 const dbDetailsPath = './db_details.json';
 const whitelist = [ 'http://localhost:5000' ];
+const adminPhonenum = [ 9930792976 ];
+const adminEmail = [ "ishaanbose2000@gmail.com" ];
 
 let conn = null;
 
@@ -51,7 +53,7 @@ function generateUniqueIDAndSalt(resultSet, max, min) {
 
 function registerGeneral(conn, data, callback) {
     conn.query(`insert into general_user values (${ data.uid }, "${ data.fname }", 
-        "${ data.mname }", "${ data.lname }", ${ data.is_admin ? 1 : 0 })`, (err, result) => {
+        "${ data.mname }", "${ data.lname }"`, (err, result) => {
             callback(err);
         });
 }
@@ -76,6 +78,8 @@ app.use(cors({
     },
     methods: [ 'GET', 'POST', 'DELETE', 'UPDATE', 'PUT' ]
 }));
+app.use("/local_business_certificates", express.static(path.join(__dirname, './local_business_certificates')));
+app.use("/hotel", express.static(path.join(__dirname, './hotel')));
 
 const ROUTER = express.Router({
     caseSensitive: true,
@@ -91,8 +95,8 @@ ROUTER.get('/admin/:uid', (req, res) => {
             console.log(err);
             res.status(500).send(err);
         } else {
-            conn.query('select is_admin from general_user where uid=?', [ req.params.uid ], (err, result) => {
-                if (result.length === 0 || result[0].is_admin === 0) {
+            conn.query('select phone_num from user where uid=?', [ req.params.uid ], (err, result) => {
+                if (result.length === 0 || !adminPhonenum.includes(parseInt(result[0].phone_num))) {
                     res.sendStatus(401);
                 } else {
                     res.sendStatus(200);
@@ -316,10 +320,13 @@ ROUTER.get('/admin/:uid', (req, res) => {
                     const certificates = [];
                     const absolute = [];
 
+                    console.log(__dirname);
+
                     for (let i = 0; i < result.length; i++) {
+                        console.log(result[i].certificate);
                         certificates.push({
                             uid: result[i].uid,
-                            link: result[i].certificate.replace(path.join(__dirname, '..'), '.'),
+                            link: result[i].certificate.replace(__dirname, '.'),
                             isVerified: result[i].is_verified === 1,
                             verifiedBy: result[i].verified_by
                         });
@@ -327,6 +334,29 @@ ROUTER.get('/admin/:uid', (req, res) => {
                     }
                     
                     res.status(200).send({ certificates: certificates, absolute: absolute });
+                }
+            });
+        }
+    });
+})
+.get('/hotel-images-info', (req, res) => {
+    conn.connect(err => {
+        if (err) {
+            console.log(err);
+            res.status(500).send(err);
+        } else {
+            conn.query('select hotel_id, name, image from hotel', (err, result) => {
+                if (err) {
+                    console.log(err);
+                    res.status(500).send(err);
+                } else {
+                    for (let i = 0; i < result.length; i++) {
+                        console.log(result[i].image);
+                        if (result[i].image !== null && result[i].image !== "null")
+                            result[i].image = result[i].image.replace(__dirname, '.');
+                    }
+
+                    res.status(200).send(result);
                 }
             });
         }
@@ -355,47 +385,46 @@ ROUTER.post('/register-user/:type', (req, res) => {
                             var password = derivedKey.toString('base64');
                             
                             conn.query(`insert into user values (${ uid }, "${ req.body.email }", "${ req.body.phone_num }",
-                                "${ password }", "${ salt }")`, (err, result) => {
-                                    if (err) {
-                                        console.log(err);
-                                        
-                                        if (err.code === 'ER_DUP_ENTRY') {
-                                            if (err.sqlMessage.includes('user.email')) {
-                                                res.status(400).send({ msg: 'Duplicate email', errCode: 1000 });
-                                            } else {
-                                                res.status(400).send({ msg: 'Duplicate phone number', errCode: 1001 });
-                                            }
+                            "${ password }", "${ salt }")`, (err, result) => {
+                                if (err) {
+                                    console.log(err);
+                                    
+                                    if (err.code === 'ER_DUP_ENTRY') {
+                                        if (err.sqlMessage.includes('user.email')) {
+                                            res.status(400).send({ msg: 'Duplicate email', errCode: 1000 });
                                         } else {
-                                            console.log(err);
-                                            res.status(500).send(err);
+                                            res.status(400).send({ msg: 'Duplicate phone number', errCode: 1001 });
                                         }
                                     } else {
-                                        req.body.uid = uid;
-
-                                        if (req.params.type === 'general') {
-                                            registerGeneral(conn, req.body, error => {
-                                                if (error) {
-                                                    console.log(error);
-                                                    res.status(500).send(error);
-                                                } else {
-                                                    res.sendStatus(200);
-                                                }
-                                            });
-                                        } else {
-                                            registerLocalBusiness(conn, req.body, error => {
-                                                if (error) {
-                                                    console.log(error);
-                                                    res.status(500).send(error);
-                                                } else {
-                                                    res.sendStatus(200);
-                                                }
-                                            });
-                                        }
+                                        console.log(err);
+                                        res.status(500).send(err);
                                     }
-                                });
+                                } else {
+                                    req.body.uid = uid;
+
+                                    if (req.params.type === 'general') {
+                                        registerGeneral(conn, req.body, error => {
+                                            if (error) {
+                                                console.log(error);
+                                                res.status(500).send(error);
+                                            } else {
+                                                res.sendStatus(200);
+                                            }
+                                        });
+                                    } else {
+                                        registerLocalBusiness(conn, req.body, error => {
+                                            if (error) {
+                                                console.log(error);
+                                                res.status(500).send(error);
+                                            } else {
+                                                res.sendStatus(200);
+                                            }
+                                        });
+                                    }
+                                }
+                            });
                         }
                     });
-                    
                 }
             });
         }
@@ -423,7 +452,38 @@ ROUTER.post('/register-user/:type', (req, res) => {
                                 if (result[0].password === derivedKey.toString('base64')) {
                                     res.sendStatus(200);
                                 } else {
-                                    res.status(404).send({ msg: "Incorrect password", errCode: 1011 });
+                                    const uid = result[0].uid;
+                                    
+                                    crypto.scrypt(req.body.password, result[0].salt_value, 32, (err, derivedKey) => {
+                                        if (err) {
+                                            console.log(err);
+                                            res.status(500).send(err);
+                                        } else {
+                                            if (result[0].password === derivedKey.toString('base64')) {
+                                                conn.query('select concat_ws(" ", fname, mname, lname) as name from general_user where uid=?', uid, (err, result) => {
+                                                    if (err) {
+                                                        console.log(err);
+                                                        res.status(500).send(err);
+                                                    } else {
+                                                        if (result.length === 0) {
+                                                            conn.query('select business_name from local_business where uid=?', uid, (err, result) => {
+                                                                if (err) {
+                                                                    console.log(err);
+                                                                    res.status(500).send(err);
+                                                                } else {
+                                                                    res.status(200).send({ uid: uid, name: result[0].business_name, isBusiness: true });
+                                                                }
+                                                            });
+                                                        } else {
+                                                            res.status(200).send({ uid: uid, name: result[0].name, isAdmin: adminEmail.includes(req.body.email) });
+                                                        }
+                                                    }
+                                                });
+                                            } else {
+                                                res.status(404).send({ msg: "Incorrect password", errCode: 1011 });
+                                            }
+                                        }
+                                    });
                                 }
                             }
                         });
@@ -456,7 +516,7 @@ ROUTER.post('/register-user/:type', (req, res) => {
                                 res.status(500).send(err);
                             } else {
                                 if (result[0].password === derivedKey.toString('base64')) {
-                                    conn.query('select concat_ws(" ", fname, mname, lname) as name, is_admin from general_user where uid=?', uid, (err, result) => {
+                                    conn.query('select concat_ws(" ", fname, mname, lname) as name from general_user where uid=?', uid, (err, result) => {
                                         if (err) {
                                             console.log(err);
                                             res.status(500).send(err);
@@ -471,7 +531,7 @@ ROUTER.post('/register-user/:type', (req, res) => {
                                                     }
                                                 });
                                             } else {
-                                                res.status(200).send({ uid: uid, name: result[0].name, isAdmin: result[0].is_admin === 1 });
+                                                res.status(200).send({ uid: uid, name: result[0].name, isAdmin: adminPhonenum.includes(parseInt(req.body.phonenum)) });
                                             }
                                         }
                                     });
@@ -523,9 +583,10 @@ ROUTER.post('/register-user/:type', (req, res) => {
 
     switch (req.params.table) {
         case "hotel":
-            query = 'insert into hotel values (?, ?, ?, ?, ?, ?, ?, ?)';
+            query = 'insert into hotel values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
             data = [ req.body.hotel_id, req.body.name, req.body.address_line1, req.body.address_line2,
-                req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price ];
+                req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price, 
+                req.body.description, req.body.link ];
             break;
         case "vehicle":
             query = 'insert into vehicle values (?, ?, ?, ?, ?)';
@@ -569,7 +630,8 @@ ROUTER.post('/register-user/:type', (req, res) => {
 })
 .post('/save-certificate/:id', (req, res) => {
     const filename = req.files.img.name;
-    const filepath = path.join(__dirname, `../assests/images/local_business_certificates/${ req.params.id }`, filename);
+
+    const filepath = path.join(__dirname, `./local_business_certificates/${ req.params.id }`, filename);
     console.log(filepath);
 
     req.files.img.mv(filepath, err => {
@@ -594,6 +656,38 @@ ROUTER.post('/register-user/:type', (req, res) => {
             });
         }
     });
+})
+.post('/upload-hotel-image/:hotel_id', (req, res) =>{ 
+    const filename = req.files.img.name;
+    
+    let filepath = path.join(__dirname, `./hotel/${ req.params.hotel_id }`, filename);
+    filepath = filepath.replace(/\\/g, "\\\\");
+    console.log(filename, filepath);
+
+    req.files.img.mv(filepath, err => {
+        if (err) {
+            console.log(err);
+            res.status(500).send(err);
+        } else {
+            conn.connect(err => {
+                if (err) {
+                    console.log(err);
+                    res.status(500).send(err);
+                } else {
+                    const query = `update hotel set image="${ filepath }" where hotel_id=${ req.params.hotel_id }`;
+                    console.log(query);
+                    conn.query(query, (err, result) => {
+                        if (err) {
+                            console.log(err);
+                            res.status(500).send(err);
+                        } else {
+                            res.sendStatus(200);
+                        }
+                    });
+                }
+            })
+        }
+    })
 });
 
 // DELETE method endpoints
