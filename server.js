@@ -759,9 +759,10 @@ ROUTER.put('/update/:table/:id', (req, res) => {
     switch (req.params.table) {
         case "hotel":
             query = `update hotel set hotel_id=?, name=?, address_line1=?, address_line2=?, address_line3=?, 
-                pincode=?, highest_price=?, lowest_price=? where hotel_id=?`;
+                pincode=?, highest_price=?, lowest_price=?, description=?, link=? where hotel_id=?`;
             data = [ req.body.hotel_id, req.body.name, req.body.address_line1, req.body.address_line2,
-                req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price, req.params.id ];
+                req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price, 
+                req.body.description, req.body.link, req.params.id ];
             break;
         case "vehicle":
             query = `update vehicle set vehicle_id=?, license_plate=?, colour=?, type=?, driver_id=? where vehicle_id=?`;
