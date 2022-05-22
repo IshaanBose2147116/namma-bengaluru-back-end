@@ -217,16 +217,18 @@ ROUTER.get('/admin/:uid', (req, res) => {
     let filters = [];
 
     if (Object.keys(req.query).length == 2) {
-        if (req.params.lowest_price === undefined || req.params.highest_price === undefined) {
+        if (req.query.lowest_price === undefined || req.query.highest_price === undefined) {
             res.status(400).send({ msg: "Query string must contain 'lowest_price' and 'highest_price'.", errCode: 2002 });
             return;
         }
 
-        query = 'select * from hotel where lowest_price >= ? and highest_price <= ?';
-        filters.push(parseFloat(req.params.lowest_price));
-        filters.push(parseFloat(req.params.highest_price));
+        query = `select hotel_id, name, concat_ws(', ', address_line1, address_line2, address_line3, pincode) as address, 
+            highest_price, lowest_price, description, link, image from hotel where lowest_price >= ? and highest_price <= ?`
+        filters.push(parseFloat(req.query.lowest_price));
+        filters.push(parseFloat(req.query.highest_price));
     } else {
-        query = 'select * from hotel';
+        query = `select hotel_id, name, concat_ws(', ', address_line1, address_line2, address_line3, pincode) as address, 
+            highest_price, lowest_price, description, link, image from hotel`;
     }
 
     conn.connect(err => {
@@ -239,6 +241,11 @@ ROUTER.get('/admin/:uid', (req, res) => {
                     console.log(err);
                     res.status(500).send(err);
                 } else {
+                    for (let i = 0; i < result.length; i++) {
+                        result[i].image = result[i].image.replace(__dirname, '');
+                        console.log(result[i].image);
+                        result[i].image = result[i].image.replace(/\\/g, '/');
+                    }
                     res.status(200).send(result);
                 }
             });
@@ -583,10 +590,10 @@ ROUTER.post('/register-user/:type', (req, res) => {
 
     switch (req.params.table) {
         case "hotel":
-            query = 'insert into hotel values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            query = 'insert into hotel values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
             data = [ req.body.hotel_id, req.body.name, req.body.address_line1, req.body.address_line2,
                 req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price, 
-                req.body.description, req.body.link ];
+                req.body.description, req.body.image, req.body.link ];
             break;
         case "vehicle":
             query = 'insert into vehicle values (?, ?, ?, ?, ?)';
@@ -759,10 +766,10 @@ ROUTER.put('/update/:table/:id', (req, res) => {
     switch (req.params.table) {
         case "hotel":
             query = `update hotel set hotel_id=?, name=?, address_line1=?, address_line2=?, address_line3=?, 
-                pincode=?, highest_price=?, lowest_price=?, description=?, link=? where hotel_id=?`;
+                pincode=?, highest_price=?, lowest_price=?, description=?, link=?, image=? where hotel_id=?`;
             data = [ req.body.hotel_id, req.body.name, req.body.address_line1, req.body.address_line2,
                 req.body.address_line3, req.body.pincode, req.body.highest_price, req.body.lowest_price, 
-                req.body.description, req.body.link, req.params.id ];
+                req.body.description, req.body.link, req.body.image, req.params.id ];
             break;
         case "vehicle":
             query = `update vehicle set vehicle_id=?, license_plate=?, colour=?, type=?, driver_id=? where vehicle_id=?`;
