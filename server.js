@@ -65,6 +65,109 @@ function registerLocalBusiness(conn, data, callback) {
         });
 }
 
+/**
+ * 
+ * @param {object} req 
+ * @param {object} res 
+ */
+async function asyncAddJobPosting(req, res) {
+    const asyncMysql = require("mysql2/promise");
+    const asyncConn = await asyncMysql.createConnection(JSON.parse(fs.readFileSync(dbDetailsPath, 'utf8')));
+    
+    try {
+        var postedOn = new Date().toLocaleString("sv");
+
+        await asyncConn.query('insert into job_posting values (?, ?, ?, ?, ?, ?, ?, ?)', 
+        [ req.body.posted_by, postedOn, req.body.job_title, req.body.description, req.body.experience, req.body.salary, 
+        req.body.starts_by, req.body.expires_by ]);
+        
+        for (let i = 0; i < req.body.contact_info.length; i++) {
+            try {
+                await asyncConn.query('insert into jp_contact_info values (?, ?, ?)', 
+                [ req.body.posted_by, postedOn, req.body.contact_info[i] ]);
+            } catch (err) {
+                console.log(err);
+                res.status(500).send(err);
+                return;
+            }
+        }
+
+        for (let i = 0; i < req.body.required_skills.length; i++) {
+            try {
+                await asyncConn.query('insert into jp_required_skills values (?, ?, ?)', 
+                [ req.body.posted_by, postedOn, req.body.required_skills[i] ]);
+            } catch (err) {
+                console.log(err);
+                res.status(500).send(err);
+                return;
+            }
+        }
+        
+        res.sendStatus(200);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+}
+
+async function getJobPostingInfo(req, res) {
+    const asyncMysql = require("mysql2/promise");
+    const asyncConn = await asyncMysql.createConnection(JSON.parse(fs.readFileSync(dbDetailsPath, 'utf8')));
+
+    try {
+        let query = "";
+        let filter = [];
+        let finalData = [];
+
+        if (req.params.id) {
+            query = 'select * from job_posting where posted_by=? order by posted_on desc';
+            filter.push(req.params.id);
+        } else {
+            query = 'select * from job_posting order by posted_on desc';
+        }
+
+        [ finalData ] = await asyncConn.query(query, filter);
+        
+        for (let i = 0; i < finalData.length; i++) {
+            finalData[i].posted_on = new Date(finalData[i].posted_on).toLocaleString("sv");
+            finalData[i].starts_by = new Date(finalData[i].starts_by).toLocaleString("sv");
+            finalData[i].expires_by = new Date(finalData[i].expires_by).toLocaleString("sv");
+
+            finalData[i].contact_info = [];
+            finalData[i].required_skills = [];
+
+            const [ businessName ] = await asyncConn.query(
+                'select business_name from local_business where uid=?', [ finalData[i].posted_by ]
+            );
+
+            finalData[i].business_name = businessName[0].business_name;
+
+            const [ contactInfoData ] = await asyncConn.query(
+                "select contact_info from jp_contact_info where posted_by=? and posted_on=?", 
+                [ finalData[i].posted_by, finalData[i].posted_on ]
+            );
+
+            for (let j = 0; j < contactInfoData.length; j++) {
+                finalData[i].contact_info.push(contactInfoData[j].contact_info);
+            }
+
+            const [ requiredSkillsData ] = await asyncConn.query(
+                "select skill from jp_required_skills where posted_by=? and posted_on=?",
+                [ finalData[i].posted_by, finalData[i].posted_on ]
+            );
+
+            for (let j = 0; j < contactInfoData.length; j++) {
+                finalData[i].required_skills.push(requiredSkillsData[j].skill);
+            }
+        }
+        
+        res.status(200).send(finalData);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+}
+
 app.use(bodyParser.json());
 app.use(fileupload({ createParentPath: true }));
 app.use(cors({
@@ -368,6 +471,9 @@ ROUTER.get('/admin/:uid', (req, res) => {
             });
         }
     });
+})
+.get("/job-postings/:id?", (req, res) => {
+    getJobPostingInfo(req, res);
 });
 
 // POST method endpoints
@@ -695,6 +801,9 @@ ROUTER.post('/register-user/:type', (req, res) => {
             })
         }
     })
+})
+.post('/add-job-posting', (req, res) => {
+    asyncAddJobPosting(req, res);
 });
 
 // DELETE method endpoints
@@ -749,6 +858,38 @@ ROUTER.delete('/cancel-booking/:booking_id', (req, res) => {
                             res.status(500).send(err);
                         } else {
                             res.sendStatus(200);
+                        }
+                    });
+                }
+            });
+        }
+    });
+})
+.delete('/delete-job-posting/:postedOn/:uid', (req, res) => {
+    conn.connect(err => {
+        if (err) {
+            console.log(err);
+            res.status(500).send(err);
+        } else {
+            conn.query(`delete from job_posting where posted_on="${ req.params.postedOn }" and posted_by=${ req.params.uid }`, 
+            (err, result) => {
+                if (err) {
+                    console.log(err);
+                    res.status(500).send(err);
+                } else {
+                    conn.query(`delete from jp_contact_info where posted_on="${ req.params.postedOn }" and posted_by=${ req.params.uid }`, (err, result) => {
+                        if (err) {
+                            console.log(err);
+                            res.status(500).send(err);
+                        } else {
+                            conn.query(`delete from jp_required_skills where posted_on="${ req.params.postedOn }" and posted_by=${ req.params.uid }`, (err, result) => {
+                                if (err) {
+                                    console.log(err);
+                                    res.status(500).send(err);
+                                } else {
+                                    res.sendStatus(200);
+                                }
+                            });
                         }
                     });
                 }
